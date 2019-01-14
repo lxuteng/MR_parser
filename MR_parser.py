@@ -54,7 +54,7 @@ def copy_right():
     --------------------------------
         Welcome to use tools!
         Author : lin_xu_teng
-        E_mail : lxuteng@live.cn
+        E_mail : xuteng.lin@huanuo-nsb.com
     --------------------------------
     """)
     logging.info('\n')
@@ -183,7 +183,7 @@ class Main:
         self.get_main_config()
 
         # 生成结果一个空字典
-        self.value_lists = {'mrs': {}, 'mro': []}
+        self.value_lists = {'mrs': {}, 'mro': [], 'mre': []}
 
         # 统计文件数
         self.all_num = {'mrs': 0, 'mro': 0, 'mre': 0}
@@ -197,7 +197,7 @@ class Main:
         # 部分配置特殊设置
         self.config_main['parse_type'] = [j.lower() for j in self.config_main['parse_type']]
         if self.config_main['parse_type'] == ['all']:
-            self.config_main['parse_type'] = ['mrs', 'mro']
+            self.config_main['parse_type'] = ['mrs', 'mro', 'mre']
 
         self.config_main['file_type'] = [k.lower() for k in self.config_main['file_type']]
         if self.config_main['file_type'] == ['']:
@@ -240,6 +240,7 @@ class Main:
 
         self.temp_mrs_data = {}
         self.temp_mro_data = {}
+        self.temp_mre_data = {}
         # self.mro_data_data = {}
         if mr_type == 'mrs':
             for l in self.cf.options('MRS'):
@@ -592,34 +593,37 @@ class Main:
                             if abs(int(temp_value[0])-int(temp_value[9])) < int(self.config_mro['cmcc_overlap_db'][0]):
                                 self.temp_mro_data[report_time]['mro_ecid_mdt_sum'][temp_ecid_ncell][1] += 1
 
-                if temp_value[27] != '0' and temp_value[27] != 'NIL':
-                    if temp_value[7] == temp_value[11] and temp_value[11] != '0' and temp_value[11] != 'NIL':
-                        if ecid_long_lat == '':
-                            ecid_long_lat = '_'.join(
-                                (
-                                    ecid1,
-                                    temp_value[27],
-                                    temp_value[28],
-                                    temp_value[7],
-                                    temp_value[8],
-                                    str(int(temp_value[0]) - 141),
-                                    str(int(temp_value[1]) / 2 - 19.5),
-                                    str(int(temp_value[2]) * 78),
+                try:
+                    if temp_value[27] != '0' and temp_value[27] != 'NIL':
+                        if temp_value[7] == temp_value[11] and temp_value[11] != '0' and temp_value[11] != 'NIL':
+                            if ecid_long_lat == '':
+                                ecid_long_lat = '_'.join(
+                                    (
+                                        ecid1,
+                                        temp_value[27],
+                                        temp_value[28],
+                                        temp_value[7],
+                                        temp_value[8],
+                                        str(int(temp_value[0]) - 141),
+                                        str(int(temp_value[1]) / 2 - 19.5),
+                                        str(int(temp_value[2]) * 78),
 
-                                    str(int(temp_value[9]) - 141),
-                                    temp_value[11],
-                                    temp_value[12],
+                                        str(int(temp_value[9]) - 141),
+                                        temp_value[11],
+                                        temp_value[12],
+                                    )
                                 )
-                            )
-                        else:
-                            ecid_long_lat = '_'.join(
-                                (
-                                    ecid_long_lat,
-                                    str(int(temp_value[9]) - 141),
-                                    temp_value[11],
-                                    temp_value[12],
+                            else:
+                                ecid_long_lat = '_'.join(
+                                    (
+                                        ecid_long_lat,
+                                        str(int(temp_value[9]) - 141),
+                                        temp_value[11],
+                                        temp_value[12],
+                                    )
                                 )
-                            )
+                except:
+                    pass
             if ecid_long_lat != '':
                 try:
                     self.temp_mro_data[report_time]['mro_ecid_mdt'][ecid_long_lat] += 1
@@ -720,15 +724,18 @@ class Main:
                             #     float(temp_value[28]), float(temp_value[27])
                             # )[0]
 
-                            temp_enb_azi = float(self.mro_ecid_lon_lat_azi[ecid][2])
+                            temp_enb_azi = float(
+                                self.mro_ecid_lon_lat_azi[ecid][2])
                             if temp_enb_azi > 180:
                                 temp_enb_azi = temp_enb_azi - 360
-                            if (temp_enb_azi > 0 and temp_ue_azi > 0) or (temp_enb_azi < 0 and temp_ue_azi < 0):
+                            if (temp_enb_azi > 0 and temp_ue_azi > 0) or (
+                                    temp_enb_azi < 0 and temp_ue_azi < 0):
                                 temp_azi_off = abs(temp_enb_azi - temp_ue_azi)
                             else:
                                 temp_azi_off_1 = abs(temp_enb_azi - temp_ue_azi)
                                 temp_azi_off_2 = abs(temp_enb_azi + temp_ue_azi)
-                                temp_azi_off = max(temp_azi_off_1, temp_azi_off_2)
+                                temp_azi_off = max(temp_azi_off_1,
+                                                   temp_azi_off_2)
                                 if temp_azi_off > 180:
                                     temp_azi_off = 360-temp_azi_off
                             # 计算距离
@@ -737,12 +744,15 @@ class Main:
                                 float(self.mro_ecid_lon_lat_azi[ecid][1]),
                                 float(temp_value[27]), float(temp_value[28])
                             )
-                            if temp_azi_off > float(self.config_mro['azi_offset'][0]) and ue_distance > float(
-                                    self.config_mro['ue_distance_excepy'][0]):
-                                temp_ecid_long_lat_value[1] = 1
-                                temp_mro_rsrp_mdt[48] = 1
-                                # temp_ecid_long_lat_value[2] += temp_ue_azi
-                                # temp_mro_rsrp_mdt[49] += temp_ue_azi
+                            if temp_azi_off > float(self.config_mro[
+                                                        'azi_offset'][0]):
+                                if ue_distance > float(
+                                        self.config_mro['ue_distance_excepy'][0]
+                                ):
+                                    temp_ecid_long_lat_value[1] = 1
+                                    temp_mro_rsrp_mdt[48] = 1
+                                    # temp_ecid_long_lat_value[2] += temp_ue_azi
+                                    # temp_mro_rsrp_mdt[49] += temp_ue_azi
 
                         except:
                             pass
