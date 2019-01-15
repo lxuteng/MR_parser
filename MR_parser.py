@@ -19,8 +19,6 @@ import openpyxl
 from geographiclib.geodesic import Geodesic
 import base64
 import pyDes
-import cProfile
-import pstats
 # import pyproj
 
 
@@ -114,6 +112,7 @@ def copy_right():
     2018-10-28 算法优化,增强程序稳定性；
     2018-11-7 算法优化,提高解析效率；
     2018-12-02 mro_ecid表增加mod3相关信息，帮助mod3干扰分析；
+    2019-01-15 增加MRE解析，辅助点对点的邻区分析；
 
 
 
@@ -247,7 +246,7 @@ class Main:
                 self.config_mrs[l] = self.cf.get('MRS', l).split(',')
             self.mrs_parse_sheet = []
             self.mrs_head = {}
-        elif mr_type == 'mro':
+        elif mr_type == 'mro' or mr_type == 'mre':
             # 读取基础数据
             self.mro_earfcn_pci_cellid_relate()
             for n in self.cf.options('MRO'):
@@ -641,6 +640,67 @@ class Main:
         except:
             traceback.print_exc()
 
+    def mre_ecid(self, object_mre, report_time, enbid):
+        try:
+            for value in object_mre:
+                temp_value = value.text.split()
+                # ecid1 = str(int(enbid) * 256 + int(object_mro.attrib['id']) % 256)
+                ecid1 = object_mre.attrib['id']
+                event_type = object_mre.attrib['EventType']
+                ecid_n_earfcn_n_pci = '_'.join((ecid1,
+                                                event_type,
+                                                temp_value[6],
+                                                temp_value[7],
+                                                ))
+                if temp_value[6] != '0' and temp_value[6] != 'NIL':
+                    temp_mre_ecid = ['mre_ecid',
+                                     ecid_n_earfcn_n_pci,
+                                     [int(temp_value[0]),
+                                      int(temp_value[4]),
+                                      1,
+                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+                                      ]
+                                     ]
+                    if int(
+                            temp_value[0]
+                    ) - int(
+                        self.config_mro['mro_rsrp_standard'][0]
+                    ) >= int(self.config_mro['cmcc_overlap_scell_rsrp'][0]):
+                        srsrp_nrsrp = int(temp_value[4]) - int(temp_value[0])
+                        if srsrp_nrsrp < -10:
+                            srsrp_nrsrp = -11
+                        if srsrp_nrsrp > 10:
+                            srsrp_nrsrp = 11
+                        temp_mre_ecid[2][self.rsrp_dir[srsrp_nrsrp]-1] = 1
+                    else:
+                        temp_mre_ecid[2][26] += 1
+
+                    # 先汇总，后才传送到queue
+                    try:
+                        self.temp_mre_data[report_time][temp_mre_ecid[0]][
+                            temp_mre_ecid[1]] += numpy.array(temp_mre_ecid[2])
+                    except:
+                        try:
+                            self.temp_mre_data[report_time][temp_mre_ecid[
+                                0]][temp_mre_ecid[1]] = numpy.array(
+                                temp_mre_ecid[2])
+                        except:
+                            try:
+                                self.temp_mre_data[report_time][
+                                    temp_mre_ecid[0]] = {}
+                                self.temp_mre_data[report_time][
+                                    temp_mre_ecid[0]][temp_mre_ecid[1]] = numpy.array(
+                                    temp_mre_ecid[2])
+                            except:
+                                self.temp_mre_data[report_time] = {}
+                                self.temp_mre_data[report_time][
+                                    temp_mre_ecid[0]] = {}
+                                self.temp_mre_data[report_time][
+                                    temp_mre_ecid[0]][temp_mre_ecid[1]] = numpy.array(
+                                    temp_mre_ecid[2])
+        except:
+            traceback.print_exc()
+
     def mro_rsrp(self, mro_object, report_time, enbid):
         # ecid = int(enbid)*256 + int(mro_object.attrib['id']) % 256
         ecid = mro_object.attrib['id']
@@ -962,7 +1022,8 @@ class Main:
         global all_list
         all_list = {
             'mrs': {},
-            'mro': {}
+            'mro': {},
+            'mre': {},
         }
         # 进度条
         self.num_ii = 0
@@ -1130,7 +1191,9 @@ class Main:
             # 数据送到queue
             if ishead == 0:
                 type_list = {'mrs': self.temp_mrs_data,
-                             'mro': self.temp_mro_data}
+                             'mro': self.temp_mro_data,
+                             'mre': self.temp_mre_data,
+                             }
                 try:
                     return [mr_type,
                             [
@@ -1215,7 +1278,7 @@ class Main:
                 #                             self.temp_mrs_data[report_time][temp_table_name_1][
                 #                                 temp_mrs_ecid] = temp_values
 
-            elif mr_type == 'mro':
+            elif mr_type == 'mro' or mr_type == 'mre':
                 table_list = {'mro_main': self.mro_main,
                               'mro_ecid': self.mro_ecid,
                               'mro_rsrp': self.mro_rsrp,
@@ -1223,6 +1286,7 @@ class Main:
                               'mro_aoa': self.mro_aoa,
                               'mro_earfcn': self.mro_earfcn,
                               'mro_report_num': self.mro_report,
+                              'mre_ecid': self.mre_ecid,
                               }
                 # report_time = self.get_report_time(tree)
                 # enbid = self.get_enbid(tree)
@@ -1244,7 +1308,7 @@ class Main:
                                                 break
                                         elif temp_tag == 'object':
                                             for table_temp in self.config_mro['mro_parse_sheet']:
-                                                if table_temp != 'mro_ecid':
+                                                if table_temp != 'mro_ecid' or table_temp != 'mre_ecid':
                                                     table_list[table_temp](temp_object, report_time, enbid)
                                                 else:
                                                     table_list[table_temp](temp_object, '-', enbid)
@@ -1284,16 +1348,19 @@ class Main:
 
     def gather(self, mr_type):
         gather_data = {'mrs': {},
-                       'mro': {}
+                       'mro': {},
+                       'mre': {},
                        }
         temp_gather_data = {}
         if mr_type == 'mrs':
             temp_gather_data = all_list
         elif mr_type == 'mro':
             temp_gather_data = all_list
+        elif mr_type == 'mre':
+            temp_gather_data = all_list
         for temp_table in temp_gather_data[mr_type]:
             # mro_ecid 表不生成小时级，汇总阶段直接删除此表数据
-            if temp_table == 'mro_ecid':
+            if temp_table == 'mro_ecid' or temp_table == 'mre_ecid':
                 temp_gather_data[mr_type][temp_table] = []
             else:
                 if temp_table not in gather_data[mr_type]:
@@ -1310,6 +1377,8 @@ class Main:
             all_list['mrs'] = gather_data['mrs']
         elif mr_type == 'mro':
             all_list['mro'] = gather_data['mro']
+        elif mr_type == 'mre':
+            all_list['mre'] = gather_data['mre']
 
     def listen(self, input_value):
         # 表结构
@@ -1919,6 +1988,118 @@ class Main:
                                                      ] + list(temp_value))
             except:
                 traceback.print_exc()
+        elif mr_type == 'mre':
+            try:
+                for table in all_list['mre']:
+                    if table == 'mre_ecid':
+                        temp_sum_counter = {}
+                        for temp_report_time_temp in all_list['mre'][table]:
+                            for table_id_temp in all_list['mre'][table][
+                                    temp_report_time_temp]:
+                                temp_value_temp = all_list[
+                                    'mre'][table][temp_report_time_temp][
+                                    table_id_temp][2]
+                                temp_id_temp = table_id_temp.split('_')[0]
+                                try:
+                                    temp_sum_counter[temp_id_temp] += temp_value_temp
+                                except:
+                                    temp_sum_counter[temp_id_temp] = temp_value_temp
+
+                        with open(os.path.join(
+                                self.config_main['target_path'][0],
+                                '{0}{1}_{2}.csv'.format('mre_ecid',
+                                                        temp_day_head,
+                                                        'sum')
+                        ), 'w', newline='') as csvfile:
+                            writer = csv.writer(csvfile)
+                            writer.writerow(('DAY', 'TIME', 'S_ECID', 'S_ENBID',
+                                             'S_ENB_CELLID', 'EventType',
+                                             'N_ENB_CELLID', 'N_EARFCN',
+                                             'N_PCI',
+                                             '站距', '是否同站邻区', 'Scrsrp',
+                                             'Ncrsrp',
+                                             '小于6db重叠覆盖度%',
+                                             '邻区权重%', '小区经度', '小区纬度',
+                                             '小区方向角',
+                                             ' N_Samplint', '<-10db', '-10db',
+                                             '-9db',
+                                             '-8db', '-7db',
+                                             '-6db', '-5db', '-4db', '-3db',
+                                             '-2db', '-1db',
+                                             '0db', '1db', '2db', '3db',
+                                             '4db', '5db', ' 6db', '7db',
+                                             '8db', '9db',
+                                             '10db', '>10db',
+                                             '服务小区RSRP<-110采样点'
+                                             ))
+                            for temp_report_time in all_list['mre'][table]:
+                                for table_id in all_list['mre'][table][
+                                        temp_report_time]:
+                                    temp_value = all_list['mre'][table][
+                                        temp_report_time][table_id]
+                                    if temp_value[2] != 0:
+                                        # temp_value_1 = temp_value[0:3] / temp_value[3]
+                                        temp_value_1 = [
+                                            round(temp_value[0] / temp_value[
+                                                2] - 140, 2),
+                                            round(temp_value[1] / temp_value[
+                                                2] - 140, 2)
+                                        ]
+                                    else:
+                                        temp_value_1 = temp_value[0:2]
+                                    # temp_value = list(map(float, temp_value))0
+                                    temp_id = table_id.split('_')
+                                    try:
+                                        base_data_lon = float(
+                                            self.mro_ecid_lon_lat_azi[temp_id[0]][0])
+                                    except:
+                                        base_data_lon = 0
+
+                                    try:
+                                        base_data_lat = float(
+                                            self.mro_ecid_lon_lat_azi[temp_id[0]][1])
+                                    except:
+                                        base_data_lat = 0
+
+                                    try:
+                                        base_data_azi = int(
+                                            self.mro_ecid_lon_lat_azi[temp_id[0]][2])
+                                    except:
+                                        base_data_azi = 0
+
+                                    temp_value_4 = [
+                                        round(sum(temp_value[9:20]) /
+                                              temp_value[2] * 100,
+                                              2),
+                                        round(temp_value[2] / temp_sum_counter[
+                                            temp_id[0]] * 100, 2),
+                                        base_data_lon,
+                                        base_data_lat,
+                                        base_data_azi,
+                                    ]
+                                    temp_value = list(temp_value_1) + list(
+                                        temp_value_4) + list(temp_value[2:])
+
+                                    temp_senbid = str(int(temp_id[0]) // 256)
+                                    temp_ncellid, temp_min_stance = self.min_distance_cell(
+                                        temp_senbid, temp_id[2], temp_id[3]
+                                    )
+
+                                    if str(temp_ncellid[:6]) == temp_senbid:
+                                        temp_value = ['同站邻区'] + temp_value
+                                    else:
+                                        temp_value = ['否'] + temp_value
+
+                                    writer.writerow([temp_day, temp_report_time, temp_id[0],
+                                                     temp_senbid,
+                                                     '_'.join((str(int(temp_id[0]) // 256),
+                                                               str(int(temp_id[0]) % 256))),
+                                                     temp_id[1], temp_ncellid,
+                                                     temp_id[2], temp_id[3],
+                                                     temp_min_stance] + temp_value)
+            except:
+                traceback.print_exc()
+
     def run_manager(self, mr_type):
         logging.info(str(''.join(('>>> 解码 ', mr_type.upper(), ' 数据...'))))
         self.get_config(mr_type)
