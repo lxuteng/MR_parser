@@ -196,7 +196,7 @@ class Main:
         # 部分配置特殊设置
         self.config_main['parse_type'] = [j.lower() for j in self.config_main['parse_type']]
         if self.config_main['parse_type'] == ['all']:
-            self.config_main['parse_type'] = ['mrs', 'mro', 'mre']
+            self.config_main['parse_type'] = ['mrs', 'mre', 'mro']
 
         self.config_main['file_type'] = [k.lower() for k in self.config_main['file_type']]
         if self.config_main['file_type'] == ['']:
@@ -1279,15 +1279,19 @@ class Main:
                 #                                 temp_mrs_ecid] = temp_values
 
             elif mr_type == 'mro' or mr_type == 'mre':
-                table_list = {'mro_main': self.mro_main,
-                              'mro_ecid': self.mro_ecid,
-                              'mro_rsrp': self.mro_rsrp,
-                              'mro_rsrp_mdt': self.mro_rsrp_mdt,
-                              'mro_aoa': self.mro_aoa,
-                              'mro_earfcn': self.mro_earfcn,
-                              'mro_report_num': self.mro_report,
-                              'mre_ecid': self.mre_ecid,
-                              }
+                if mr_type == 'mro':
+                    table_list = {'mro_main': self.mro_main,
+                                  'mro_ecid': self.mro_ecid,
+                                  'mro_rsrp': self.mro_rsrp,
+                                  'mro_rsrp_mdt': self.mro_rsrp_mdt,
+                                  'mro_aoa': self.mro_aoa,
+                                  'mro_earfcn': self.mro_earfcn,
+                                  'mro_report_num': self.mro_report,
+                                  }
+                else:
+                    table_list = {
+                                  'mre_ecid': self.mre_ecid,
+                                  }
                 # report_time = self.get_report_time(tree)
                 # enbid = self.get_enbid(tree)
                 try:
@@ -1309,22 +1313,12 @@ class Main:
                                         elif temp_tag == 'object':
                                             for table_temp in self.config_mro['mro_parse_sheet']:
                                                 if table_temp != 'mro_ecid' or table_temp != 'mre_ecid':
-                                                    table_list[table_temp](temp_object, report_time, enbid)
+                                                    if table_temp in table_list:
+                                                        table_list[table_temp](temp_object, report_time, enbid)
                                                 else:
                                                     table_list[table_temp](temp_object, '-', enbid)
                 except:
                     traceback.print_exc()
-                                    # for smr in measurement.iter('smr'):
-                                    #     head_temp = smr.text.replace('.', '_').rstrip().split(' ')
-                                    #     if head_temp[0] == 'MR_LteScRSRP':
-                                    #         for object_mro in measurement.iter('object'):
-                                    #             # 分别生成需要的mro表
-                                    #             for table_temp in self.config_mro['mro_parse_sheet']:
-                                    #                 if table_temp != 'mro_ecid':
-                                    #                     table_list[table_temp](object_mro, report_time, enbid)
-                                    #                 else:
-                                    #                     table_list[table_temp](object_mro, '-', enbid)
-                                    #         break
 
         elif ishead == 1:
             # 获取需处理表名
@@ -2082,7 +2076,7 @@ class Main:
 
                                     temp_senbid = str(int(temp_id[0]) // 256)
                                     temp_ncellid, temp_min_stance = self.min_distance_cell(
-                                        temp_senbid, temp_id[2], temp_id[3]
+                                        str(temp_senbid), temp_id[2], temp_id[3]
                                     )
 
                                     if str(temp_ncellid[:6]) == temp_senbid:
