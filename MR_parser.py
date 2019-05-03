@@ -113,6 +113,7 @@ def copy_right():
     2018-11-7 算法优化,提高解析效率；
     2018-12-02 mro_ecid表增加mod3相关信息，帮助mod3干扰分析；
     2019-01-15 增加MRE解析，辅助点对点的邻区分析；
+    2019-02-21 mro_earfcn表增加统计重叠覆盖度统计；
 
 
 
@@ -370,12 +371,12 @@ class Main:
         path_base_data = os.path.join(config_manager.main_path, 'enb_basedat.xlsx')
         f_base_data_wb = openpyxl.load_workbook(path_base_data, read_only=True)
         for temp_sheet_name in f_base_data_wb.sheetnames:
+            print(temp_sheet_name)
             if temp_sheet_name == 'enb_basedat':
                 temp_f_base_data_wb_sheet = f_base_data_wb[temp_sheet_name]
                 for temp_row in temp_f_base_data_wb_sheet.iter_rows(min_row=2):
                     temp_value = [str(j.value) for j in temp_row]
                     basedatas.append(temp_value)
-
         self.mro_earfcn_pci_cellid = {}
         self.mro_enbid_list = {}
         self.mro_enbcellid_cn_name = {}
@@ -923,7 +924,7 @@ class Main:
         # ecid1 = str(int(enbid) * 256 + int(object_mro.attrib['id']) % 256)
         ecid1 = object_mro.attrib['id']
         temp_value_list = []
-        temp_mro_earfcn = numpy.zeros(96)
+        temp_mro_earfcn = numpy.zeros(96+24)
         temp_mro_earfcn_operator = numpy.zeros(96)
         for value in object_mro:
             temp_value = value.text.split()
@@ -935,7 +936,18 @@ class Main:
         if len(temp_value_list) != 0:
             max_temp_value_list = max(temp_value_list)
             temp_mro_earfcn[self.mro_rsrp_list[max_temp_value_list] + 48] += 1
-            temp_mro_earfcn[self.mro_rsrp_list[int(temp_value[0])]] += 1
+            temp_s_rsrp = int(temp_value[0])
+            temp_mro_earfcn[self.mro_rsrp_list[temp_s_rsrp]] += 1
+
+            if temp_s_rsrp-141 >= -110:
+                temp_diff_value = max_temp_value_list - temp_s_rsrp
+                if temp_diff_value < -10:
+                    temp_diff_value = -11
+                if temp_diff_value > 10:
+                    temp_diff_value = 11
+                temp_mro_earfcn[self.rsrp_dir[temp_diff_value]-4 + 96] += 1
+            else:
+                temp_mro_earfcn[96+24-1] += 1
 
             temp_mro_earfcn_operator[self.mro_rsrp_list[max_temp_value_list]+48] = 1
             temp_mro_earfcn_operator[self.mro_rsrp_list[int(temp_value[0])]] = 1
@@ -1162,8 +1174,8 @@ class Main:
                                             log_file_child_num += 1
                                             log_file_child_list.append(temp_file)
                             except:
-                                pass
-                                # traceback.print_exc()
+                                # pass
+                                traceback.print_exc()
 
                         tar_f.close()
                     except:
@@ -1185,8 +1197,8 @@ class Main:
                                 log_file_child_num += 1
                                 log_file_child_list.append(file_name)
                 except:
-                    pass
-                    # traceback.print_exc()
+                    # pass
+                    traceback.print_exc()
 
             # 数据送到queue
             if ishead == 0:
@@ -1873,6 +1885,7 @@ class Main:
                                 ['DAY', 'TIME', 'ECID', 'ENBID', 'ENB_CELLID', 'n_EARFCN',
                                  '服务小区_MR覆盖率（RSRP>=-110)', '服务小区_RSRP>=-110计数器', '服务小区_ALL计数器',
                                  '邻区频点_MR覆盖率（RSRP>=-110)', '邻区频点_RSRP>=-110计数器', '邻区频点_ALL计数器',
+                                 'N-S小于6db重叠计数器', 'N-S小于6db重叠覆盖度%',
                                  's_RSRP_00', 's_RSRP_01',
                                  's_RSRP_02', 's_RSRP_03', 's_RSRP_04', 's_RSRP_05', 's_RSRP_06', 's_RSRP_07', 's_RSRP_08',
                                  's_RSRP_09', 's_RSRP_10', 's_RSRP_11', 's_RSRP_12', 's_RSRP_13', 's_RSRP_14', 's_RSRP_15',
@@ -1888,7 +1901,14 @@ class Main:
                                  'n_RSRP_24', 'n_RSRP_25', 'n_RSRP_26', 'n_RSRP_27', 'n_RSRP_28', 'n_RSRP_29', 'n_RSRP_30',
                                  'n_RSRP_31', 'n_RSRP_32', 'n_RSRP_33', 'n_RSRP_34', 'n_RSRP_35', 'n_RSRP_36', 'n_RSRP_37',
                                  'n_RSRP_38', 'n_RSRP_39', 'n_RSRP_40', 'n_RSRP_41', 'n_RSRP_42', 'n_RSRP_43', 'n_RSRP_44',
-                                 'n_RSRP_45', 'n_RSRP_46', 'n_RSRP_47'])
+                                 'n_RSRP_45', 'n_RSRP_46', 'n_RSRP_47',
+                                 '<-10db', '-10db', '-9db', '-8db', '-7db',
+                                 '-6db', '-5db', '-4db', '-3db', '-2db', '-1db',
+                                 '0db', '1db', '2db', '3db',
+                                 '4db', '5db', ' 6db', '7db', '8db', '9db',
+                                 '10db', '>10db',
+                                 '服务小区RSRP<-110采样点'
+                                 ])
                             for temp_report_time in all_list['mro'][table]:
                                 for ecid_id in all_list['mro'][table][temp_report_time]:
                                     temp_value = all_list['mro'][table][temp_report_time][ecid_id]
@@ -1898,12 +1918,20 @@ class Main:
                                         s_temp_value_3 = round(s_temp_value_1 / s_temp_value_2 * 100, 2)
                                     else:
                                         s_temp_value_3 = '-'
-                                    n_temp_value_1 = sum(temp_value[55:])
-                                    n_temp_value_2 = sum(temp_value[48:])
+                                    n_temp_value_1 = sum(temp_value[55:96])
+                                    n_temp_value_2 = sum(temp_value[48:96])
                                     if n_temp_value_2 != 0:
                                         n_temp_value_3 = round(n_temp_value_1 / n_temp_value_2 * 100, 2)
                                     else:
                                         n_temp_value_3 = '-'
+
+                                    n_temp_value_4 = sum(temp_value[102:113])
+                                    if n_temp_value_4 != 0:
+                                        n_temp_value_5 = round(n_temp_value_4
+                                                               / n_temp_value_2 * 100, 2)
+                                    else:
+                                        n_temp_value_5 = '-'
+
                                     temp_ecid_earfcn = ecid_id.split('_')
                                     temp_enbid = str(int(temp_ecid_earfcn[0]) // 256)
                                     temp_enb_cellid = '_'.join((str(int(temp_ecid_earfcn[0]) // 256), str(int(temp_ecid_earfcn[0]) % 256)))
@@ -1912,6 +1940,7 @@ class Main:
                                                      temp_ecid_earfcn[1],
                                                      s_temp_value_3, s_temp_value_1, s_temp_value_2,
                                                      n_temp_value_3, n_temp_value_1, n_temp_value_2,
+                                                     n_temp_value_4,n_temp_value_5
                                                      ] + list(temp_value))
 
                     elif table == 'mro_earfcn_operator':
